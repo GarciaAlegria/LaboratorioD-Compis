@@ -21,6 +21,16 @@ def read_yalex(yalex_file):
         if line.startswith("rule") and not any(c.isalnum() for c in line):
             raise ValueError(f"Error en línea {line_number}: Sección 'rule' vacía")
 
+    # Convertir caracteres ASCII de vuelta a su forma original
+    def convert_to_original(chars):
+        original_chars = []
+        for char in chars:
+            if isinstance(char, int):  # Verifica si el elemento es un código ASCII
+                original_chars.append(chr(char))  # Convierte el código ASCII a su carácter correspondiente
+            else:
+                original_chars.append(char)  # Conserva el elemento si no es un código ASCII
+        return original_chars
+
     # Abrir el archivo y leerlo línea por línea
     with open(yalex_file, "r") as yal:
         active_elements = False
@@ -295,4 +305,7 @@ def read_yalex(yalex_file):
 
     final_regex = replace_regex(clean_regex_expression, dict(clean_functions))
 
-    return final_regex
+    # Convertir códigos ASCII de vuelta a caracteres originales
+    final_regex_characters = convert_to_original(final_regex)
+
+    return final_regex_characters

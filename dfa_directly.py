@@ -125,7 +125,7 @@ def exec(stack_arbol, node_list, alfabeto, graph=False):
         graph = create_dfa_graph(estados, estado_final, Dtran, estado_inicial)
 
         # Save or display the graph
-        png_file_path = "pngs/dfa_direct_graph.png"
+        png_file_path = "dfa_direct_graph.png"
         graph.write_png(png_file_path)  # Save PNG file
 
     return estados, alfabeto, Dtran, estado_inicial, estado_final
