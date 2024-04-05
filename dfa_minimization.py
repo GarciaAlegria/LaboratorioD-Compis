@@ -1,160 +1,114 @@
-import pydotplus
+from afd import *
 
+# Funcion para minimizacion
+def afdMinimization(afd, name, title):
+    # Se obtienen los estados
+    states = afd.states
+    transitions = afd.transitions
+    symbols = afd.symbols
+    partitions = []
+    acceptance_state = []
+    normal_state = []
 
-def create_dfa_graph(states, acceptance_states, transitions, start_state):
+    # Se itera en la primera particion de los estados de aceptacion
+    for i in states:
+        if(i in afd.final_state):
+            acceptance_state.append(i)
+        else:
+            normal_state.append(i)
 
-    start_state = start_state[0]
+    # Si hay dos particiones se guardan
+    if(len(normal_state) != 0):
+        partitions.append(normal_state)
+    if(len(acceptance_state) != 0):
+        partitions.append(acceptance_state)
 
-    # Crear una representación del DFA en formato DOT
-    dot = pydotplus.Dot()
-    dot.set_rankdir("LR")  # Utilizar 'TB' para un diseño de arriba hacia abajo
-    dot.set_prog("neato")
-
-    # Crea nodos para cada estado
-    state_nodes = {}
-    num = 0
-    for state in states:
-        node = pydotplus.Node(state)
-        node.set_shape("circle")
-
-        if start_state == state:
-            # node.set_name("Start")
-            node.set_shape("circle")
-            node.set_style("filled")
-        # else:
-        #     node.set_name(str(num))
-
-        for final_state in acceptance_states:
-            if final_state == state:
-                # node.set_name(str(num))
-                node.set_shape("doublecircle")
-
-        node.set_fontsize(12)  # Establece el tamaño de fuente
-        node.set_width(0.6)  # Establece el ancho deseado
-        node.set_height(0.6)  # Establece la altura deseada
-        state_nodes[state] = node
-        dot.add_node(node)
-        num += 1
-
-    # Agrega transiciones como arcos
-    for (source, symbol, target) in transitions:
-        if source in state_nodes and target in state_nodes:
-            edge = pydotplus.Edge(state_nodes[source], state_nodes[target], label=symbol)
-            dot.add_edge(edge)
-
-    return dot
-
-def write_info_to_file(states, inicial, final, transiciones, file_path):
-
-    with open(file_path, 'w') as file:
-        file.write("Inicial = " + str(inicial) + "\n")
-        file.write("Aceptacion = " + str(final) + "\n")
-        file.write("Estados = " + str(states) + "\n")
-        file.write("Transicion = " + str(transiciones) + "\n")
-
-
-def exec(estados, alfabeto, transiciones, estado_inicial, estados_aceptacion, graph=False, check=False):
-
-    new_transitions = []
-
-    partitions = {frozenset(state for state in estados if state in estados_aceptacion), frozenset(state for state in estados if state not in estados_aceptacion),}
-
-    def encontrar_particion(state, particiones):
-        for particion in particiones:
-            if state in particion:
-                return particion
-        return None
-    
-    def encontrar_transiciones(estado, symbol):
-        for transi in transiciones:
-            if transi[0] == estado and transi[1] == symbol:
-                return transi[2]
-        return None
-    
-    finished = True
-    while finished:
-        new_partitions = set()
-        finished = False
+    # Se itera hasta que sean distinguibles
+    not_distinguishable = True
+    while(not_distinguishable):
+        # Se utiliza un diccionario para guardar particiones
+        partition_dictionary = {}
+        # Se itera en cada particion y estado de esta
         for partition in partitions:
-            partition_mapping = {}
             for state in partition:
-                transicion_signature = tuple(
-                    encontrar_particion(encontrar_transiciones(state, symbol), partitions)
-                    for symbol in alfabeto
-                )
-                if transicion_signature not in partition_mapping:
-                    partition_mapping[transicion_signature] = set()
-                partition_mapping[transicion_signature].add(state)
-            
-            if len(partition_mapping) > 1:
-                finished = True
-                new_partitions.update(
-                    frozenset(subset) for subset in partition_mapping.values()
-                )
-            else:
-                new_partitions.add(partition)
-        
-        partitions = new_partitions
+                for symbol in symbols:
+                    # Se itera en cada simbolo de cada una de las transiciones
+                    for transition in transitions:
+                        if(transition[0] == state and transition[1] == symbol):
+                            for partition_2 in partitions:
+                                if(transition[2] in partition_2):
+                                    # Para cada simbolo se guarda el index de donde va cada una de las transiciones
+                                    if(state not in partition_dictionary):
+                                        partition_dictionary[state] = [[symbol, partitions.index(partition_2)]]
+                                    else:
+                                        value = partition_dictionary[state]
+                                        value.append([symbol, partitions.index(partition_2)])
+                                        partition_dictionary[state] = value
+                        else:
+                            if(state not in partition_dictionary):
+                                    partition_dictionary[state] = []
 
-    new_states = [partition for partition in partitions if partition != frozenset()]
+        # Se crean las particiones de los simbolos y a que grupo llega cada uno
+        states_partition = []
+        new_partitions = []
+        # Para cada estado de las particiones se revisa el diccionario
+        for partition in partitions:
+            for state in partition:
+                value_partition = partition_dictionary[state]
+                value_partition.append(partitions.index(partition))
+                # Si el valor de las transiciones con los simbolos se agrega a la nueva particion
+                if(value_partition not in states_partition):
+                    states_partition.append(value_partition)
+                    new_partitions.append([state])
+                # Si existe ese valor de transicion con simbolos se agrega al grupo al que pertenece
+                else:
+                    if(value_partition in states_partition):
+                        index = states_partition.index(value_partition)
+                        new_partitions[index].append(state)       
 
-    old_to_new = {}
-    for new_state in new_states:
-        for old_state in estados:
-            if old_state in new_state:
-                old_to_new[old_state] = new_state
+        # Si las particiones nuevas y anteriores son iguales es que no se puede seguir operando
+        if(partitions == new_partitions):
+            not_distinguishable = False
+        # Si no se guardan las particiones nuevas
+        else:
+            partitions = new_partitions
 
-    def find_if_duplicate(state, symbol, transiciones):
-        for transi in transiciones:
-            if transi[0] == state and transi[1] == symbol:
-                return True
-        return False
+    # Se crean las nuevas listas de estados
+    minimized_states = []
+    minimized_transitions = []
+    minimized_final_state = []
 
-    for new_state in new_states:
-        for old_state in estados:
-            if old_state in new_state:
-                for tran in transiciones:
-                    if old_state == tran[0]:
-                        if not find_if_duplicate(new_state, tran[1], new_transitions):
-                            if tran[2] in old_to_new:
-                                new_transitions.append((new_state, tran[1], old_to_new[tran[2]]))
+    # Por cada particion se crea un nuevo estado
+    for partition in partitions:
+        minimized_states.append("S" + str(partitions.index(partition)))
 
-    new_estado_inicial = list(str(old_to_new[estado]) for estado in estado_inicial)
-    new_estados_aceptacion = list(str(old_to_new[state]) for state in estados_aceptacion)
-    new_states = list(str(state) for state in new_states)
-    if check:
-        new_alfabeto = list((int(symbol) if symbol.isdigit() else symbol) for symbol in alfabeto)
-        transit = [((str(tran[0]), int(tran[1]), str(tran[2])) if tran[1].isdigit() else (str(tran[0]), tran[1], str(tran[2]))) for tran in new_transitions]
-    else:
-        new_alfabeto = list((int(symbol) if symbol.isdigit() else symbol) for symbol in alfabeto)
-        transit = [(str(tran[0]), int(tran[1]), str(tran[2])) for tran in new_transitions]
+        # Se hacen dos sets para lograr hacer operaciones de conjuntos entre ellos
+        set_states = set(partition)
+        set_final_states = set(afd.final_state)
 
+        # Se verifica que los estados encontrados se encuentren en el conjunto de estados finales
+        if(set_states.intersection(set_final_states).__len__() != 0):
+            minimized_final_state.append("S" + str(partitions.index(partition)))
 
-    dictionary = {}
-
-    i = 40
-    for state in new_states:
-        dictionary[state] = i
-        i += 1
-
-    new_states_changed = list(dictionary[state] for state in new_states)
+    # Se crean las tranciones por cada una de las particiones
+    for partition in partitions:
+        # Por cada simbolo
+        for symbol in symbols:
+            index = partitions.index(partition)
+            state_partition = states_partition[index]
+            len_partition = len(state_partition) - 1
+            # Para cada simbolo al que transiciona se crea la transicion
+            for i in range(len_partition):
+                if(state_partition[i][0] == symbol):
+                    # Se agrega la transicion
+                    minimized_transitions.append([minimized_states[index], symbol, minimized_states[state_partition[i][1]]])
     
-    inicial = list(dictionary[iniciale] for iniciale in new_estado_inicial)
-    final = list(dictionary[finale] for finale in new_estados_aceptacion)
-
-    transitions = []
-
-    for tran in transit:
-        tran = (dictionary[tran[0]], tran[1], dictionary[tran[2]])
-        transitions.append(tran)
-
-    if graph:
-        pydotplus.find_graphviz()
-
-        # Crear el grafo del DFA minimizado
-        graph = create_dfa_graph(new_states_changed, final, transitions, inicial)
-
-        # Guardar o mostrar el gráfico
-        graph.write_png("dfa_graph_minimized_conversion.png")  # Guardar archivo PNG
-
-    return new_states_changed, new_alfabeto, transitions, inicial[0], final
+    # Se crea el AFD
+    afd_minimized = AFD(name, title)
+    afd_minimized.regex = afd.regex
+    afd_minimized.states = minimized_states
+    afd_minimized.transitions = minimized_transitions
+    afd_minimized.initial_state = minimized_states[0]
+    afd_minimized.final_state = minimized_final_state
+    afd_minimized.symbols = afd.symbols
+    afd_minimized.graphAF()

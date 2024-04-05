@@ -1,52 +1,82 @@
-def shunting_yard(regex):
-    # Definir los operadores y paréntesis
-    PIPE = '|'
-    STAR = '*'
-    PLUS = '+'
-    QUESTION = '?'
-    CONCAT = '·'
-    LEFT_PAREN = '('
-    RIGHT_PAREN = ')'
-    # Asignar precedencias a los operadores
-    OPERATORS = {PIPE: 1, CONCAT: 2, QUESTION: 3, STAR: 3, PLUS: 3}
+# Clase de Regex
+class Regex (object):
 
-    # Inicializar una pila y una lista de salida
-    stack = []
-    output = []
+    # Se inicia la funcion
+    def __init__(self, regex):
+        self.expression = regex
+        self.operators = []
+        self.errorValidation()
+        self.postfix_expression = self.postfixConversion() 
 
-    # Iterar sobre cada token en la expresión regular
-    for token in regex:
-        # Si el token es un operador
-        if token in OPERATORS:
-            # Mientras la pila no esté vacía y el operador en la cima de la pila no sea un paréntesis izquierdo
-            # y la precedencia del operador actual sea menor o igual que la precedencia del operador en la cima de la pila
-            while stack and stack[-1] != LEFT_PAREN and OPERATORS[token] <= OPERATORS.get(stack[-1], 0):
-                # Sacar el operador de la pila y agregarlo a la lista de salida
-                output.append(stack.pop())
-            # Agregar el operador actual a la pila
-            stack.append(token)
-        # Si el token es un paréntesis izquierdo
-        elif token == LEFT_PAREN:
-            # Agregar el paréntesis izquierdo a la pila
-            stack.append(token)
-        # Si el token es un paréntesis derecho
-        elif token == RIGHT_PAREN:
-            # Mientras la pila no esté vacía y el operador en la cima de la pila no sea un paréntesis izquierdo
-            while stack and stack[-1] != LEFT_PAREN:
-                # Sacar el operador de la pila y agregarlo a la lista de salida
-                output.append(stack.pop())
-            # Si la pila no está vacía y el operador en la cima de la pila es un paréntesis izquierdo
-            if stack and stack[-1] == LEFT_PAREN:
-                # Sacar el paréntesis izquierdo de la pila
-                stack.pop()
-        # Si el token es un carácter literal
-        else:
-            # Agregar el carácter literal a la lista de salida
-            output.append(token)
+    # Se realiza para brindar el resultado de la expresion postfix
+    def __repr__(self) -> str:
+        return self.postfix_expression
+    
+    # Se ven la validacion de los errores
+    def errorValidation(self):
+        expression = self.expression
+        if(expression.count('(') != expression.count(')')):
+            raise Exception("ERROR:")
+        if(expression[0] in ".|*+?"):
+            raise Exception("ERROR:")
 
-    # Vaciar la pila y agregar cualquier operador restante a la lista de salida
-    while stack:
-        output.append(stack.pop())
+    # Funcion para conocer la precedencia
+    def operatorPrecedence(self, character):
 
-    # Devolver la lista de salida que representa la expresión regular en notación posfija
-    return output
+        # diccionario de orden de presedencia
+        precedence = {'(' : 1, '|' : 2, '.' : 3, '?' : 4, '*' : 4, '+' : 4}
+
+        # Se devuelve la precedencia segun el caracter ingresado
+        try:
+            return precedence[character]
+        except:
+            return 5
+
+    # Algoritmo implementando Shunting-Yard
+    def postfixConversion(self):
+        
+        # Se crean la lista de operadores y caracteres
+        # Ademas se crea la expresion
+        operators_list = ['|', '?', '*', '+']
+        characters_queue = []
+        postfix_expression = []
+
+        # Se itera sobre la expresion para crear la cola de caracteres a utilizar para el algoritmo
+        # Ademas se agregan los '.' para la concatenacion que se realizara
+        for i in range(len(self.expression)):
+            char = self.expression[i]
+
+            if((i + 1) < len(self.expression)):
+                next_char = self.expression[i + 1]
+                characters_queue.append(char)
+
+                if((char != '(') and (next_char != ')') and (next_char not in operators_list) and (char != '|')):
+                    characters_queue.append('.')
+        
+        characters_queue.append(self.expression[len(self.expression) - 1])
+
+        # Se itera en los caracteres para obtener la precedencia
+        for char in characters_queue:
+
+            if(char == '('):
+                self.operators.append(char)
+            elif(char == ')'):
+                while(self.operators[-1] != '('):
+                    postfix_expression.append(self.operators.pop())
+                self.operators.pop()
+            else:
+                while(len(self.operators) > 0):
+                    last_char = self.operators[-1]
+                    last_char_precedence = self.operatorPrecedence(last_char)
+                    char_precedence = self.operatorPrecedence(char)
+
+                    if(last_char_precedence >= char_precedence):
+                        postfix_expression.append(self.operators.pop())
+                    else:
+                        break
+                
+                self.operators.append(char)
+
+        while(len(self.operators) > 0):
+            postfix_expression.append(self.operators.pop())
+        return postfix_expression

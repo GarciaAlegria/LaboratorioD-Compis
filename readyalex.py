@@ -1,311 +1,270 @@
-def read_yalex(yalex_file):
-    # Listas para almacenar funciones y expresiones regulares
-    functions = []  # Lista para almacenar las definiciones de funciones
-    clean_functions = []  # Lista para almacenar las definiciones de funciones limpias
-    regex = []  # Lista para almacenar las expresiones regulares
-    clean_regex_expression = []  # Lista para almacenar las expresiones regulares limpias
-    reserved_word = ""  # Palabra reservada temporal
+class File(object):
+    # Se inicializan los atributos del archivo
+    def __init__(self, filename):
+        self.filename = filename
+        self.regular_expressions = {}
+        self.regex = []
+        self.tokens_list = {}
+        self.read()
 
-    # Revisar errores de cierre de corchetes
-    def check_brackets(line, line_number):
-        if line.count("[") != line.count("]"):
-            raise ValueError(f"Error en línea {line_number}: Error de cierre de corchetes")
+    # Se crea la funcion para leer el archivo
+    def read(self):
+        # Se abre el archivo para leer
+        with open(self.filename, "r") as file:  
 
-    # Revisar errores de comillas simples y dobles
-    def check_quotes(line, line_number):
-        if line.count("'") % 2 != 0 or line.count('"') % 2 != 0:
-            raise ValueError(f"Error en línea {line_number}: Error de comillas")
+            # Se crea una variable para conocer si se toman los token y una para la regex final
+            tokens = None
+            final_regex = []
 
-    # Sección de rule vacía
-    def check_empty_rule(line, line_number):
-        if line.startswith("rule") and not any(c.isalnum() for c in line):
-            raise ValueError(f"Error en línea {line_number}: Sección 'rule' vacía")
+            # Se itera por cada linea
+            for line in file:
 
-    # Convertir caracteres ASCII de vuelta a su forma original
-    def convert_to_original(chars):
-        original_chars = []
-        for char in chars:
-            if isinstance(char, int):  # Verifica si el elemento es un código ASCII
-                original_chars.append(chr(char))  # Convierte el código ASCII a su carácter correspondiente
-            else:
-                original_chars.append(char)  # Conserva el elemento si no es un código ASCII
-        return original_chars
+                # Si la linea tiene un let
+                if('let' in line):
+                    # Se reemplazan los espacios vacios
+                    line = line.replace('let ', '')
+                    line = line.replace(" ", "")
+                    # Se divide entre la definicion y el valor de esta
+                    definition, value = line.split('=')
+                    # Se crea la lista con la definicion final
+                    value_definition = []
+                    # Si el primer elemento del valor es una llave significa que es un charset
+                    if(value[0] == '['):
+                        # Se cambian las llaves por parentesis
+                        value_definition.append('(')
 
-    # Abrir el archivo y leerlo línea por línea
-    with open(yalex_file, "r") as yal:
-        active_elements = False
-        for line_number, line in enumerate(yal, start=1):
-            # Procesamiento de las líneas del archivo
-            check_brackets(line, line_number)
-            check_quotes(line, line_number)
-            check_empty_rule(line, line_number)
-            
-            if active_elements:
-                temporary_reserved_word = ""
-                # Leer cada carácter de la línea
-                for x in line:
-                    if x != " ":
-                        if x != "\n":
-                            if x != "'":
-                                temporary_reserved_word += x
-                            if x == "|":
-                                regex.append(temporary_reserved_word)
-                                temporary_reserved_word = ""
-                        else:
-                            regex.append(temporary_reserved_word)
-            if line.startswith("let"):
-                if "=" not in line:
-                    raise ValueError(f"Error en línea {line_number}: Falta el símbolo '=' en la declaración 'let'")
-                elif len(line.split("=")) != 2:
-                    raise ValueError(f"Error en línea {line_number}: Declaración 'let' incorrecta")
-                elif len(line.split("=")[1].strip()) == 0:
-                    raise ValueError(f"Error en línea {line_number}: La declaración 'let' está vacía")
-                functions.append(line[4:-1])  # Agregar la definición de la función a la lista de funciones
-            if line.startswith("rule"):
-                active_elements = True  # Activar la bandera para procesar las expresiones regulares
+                        # Si son comillas simples es que seran por separados o elementos de uno hasta otro
+                        if(value[1] == "'"):
+                            # Se revisa si se debe de realiza un ciclo con los elementos
+                            separator_counter = value.count('-')
+                            # Si se debe de realizar un ciclo 
+                            if(separator_counter != 0):
 
-    if active_elements and not regex:  # Verificar si se espera una expresión regular pero no se encuentra ninguna
-        raise ValueError("No se encontraron expresiones regulares después de 'rule'")
+                                # Se crea un ciclo while para iterar con respecto a la cantidad de ciclos de caracteres
+                                index_counter = 1
+                                first_value = ""
+                                second_value = ""
+                                first_apostrophe = None
+                                second_apostrophe = None
 
-    # Procesamiento de expresiones regulares
-    for x in range(len(regex)):
-        temporary_reserved_word = ""
-        for l in regex[x]:
-            temporary_reserved_word += l
-            if "{" in temporary_reserved_word:
-                temporary_reserved_word = temporary_reserved_word[:-1]
-                break
-            if "(*" in temporary_reserved_word:
-                temporary_reserved_word = temporary_reserved_word[:-2]
-                break
+                                while(separator_counter != 0):
+                                    # Se visualiza que exista una apostrofe y la segunda
+                                    # Para conocer que elemento inicia el ciclo
+                                    if(value[index_counter] == "'" and not first_apostrophe):
+                                        first_apostrophe = index_counter
+                                    elif(value[index_counter] == "'" and first_apostrophe):
+                                        second_apostrophe = index_counter
 
-        # Actualizar la lista regex con el valor modificado
-        regex[x] = temporary_reserved_word
-
-    # Procesamiento de expresiones regulares
-    clean_regex_expression = []
-    for x in regex:
-        if len(x) != 0:
-            if x.count('"') == 2:
-                x = x[1:-1]
-            clean_regex_expression.append(x)
-
-    # Procesamiento de funciones
-    for f in functions:
-        deletable_array = []  # Lista para almacenar los tokens de la función
-        temp_expression = []  # Lista temporal para almacenar la definición de la función
-        nombre, definition = f.split("=")
-        nombre = nombre.strip()  # Limpiar el nombre de la función
-        definition = definition.strip()  # Limpiar la definición de la función
-        temp_expression.append(nombre)
-        reserved_word = ""
-        if definition[0] == "[":
-            definition = definition[1:-1]
-            for x in definition:
-                reserved_word += x
-                if reserved_word[0] == '"' or reserved_word[0] == "'":
-                    if reserved_word.count("'") == 2:
-                        reserved_word = reserved_word[1:-1]
-                        # Manejo de caracteres especiales
-                        if len(reserved_word) == 2:
-                            if reserved_word == "\s":
-                                reserved_word = bytes(" ", "utf-8").decode(
-                                    "unicode_escape"
-                                )
+                                    # Se toma el primer valor del ciclo
+                                    if(first_apostrophe and second_apostrophe and first_value == ""):
+                                        first_value = value[first_apostrophe + 1]
+                                        first_apostrophe = None
+                                        second_apostrophe = None
+                                    # Se toma el segundo valor del ciclo
+                                    elif(first_apostrophe and second_apostrophe and first_value != ""):
+                                        second_value = value[first_apostrophe + 1]
+                                        first_apostrophe = None
+                                        second_apostrophe = None
+                                        separator_counter -= 1
+                                    # Se convierten los valores en ascii y se realiza el ciclo
+                                    if(first_value != "" and second_value != ""):
+                                        first_ascii = ord(first_value)
+                                        second_ascii = ord(second_value)
+                                        first_value = ""
+                                        second_value = ""
+                                        # Se guardan los valores en la lista del valor de la definicion
+                                        # Se toma en cuenta que se deben de guardar como un elemento or otro elemento
+                                        if(len(value_definition) > 2):
+                                            value_definition.append('|')
+                                        for i in range(first_ascii, second_ascii):
+                                            value_definition.append(i)
+                                            value_definition.append('|')
+                                        value_definition.append(second_ascii)
+                                    # Se itera en todos los elementos
+                                    index_counter += 1
+                            # Si no se realizan ciclos de caracteres
                             else:
-                                reserved_word = bytes(
-                                    reserved_word, "utf-8"
-                                ).decode("unicode_escape")
-                            deletable_array.append(ord(reserved_word))
-                        else:
-                            if reserved_word == " ":
-                                reserved_word = bytes(" ", "utf-8").decode(
-                                    "unicode_escape"
-                                )
-                                deletable_array.append(ord(reserved_word))
-                            else:
-                                deletable_array.append(ord(reserved_word))
-                        reserved_word = ""
-                    if reserved_word.count('"') == 2:
-                        reserved_word = reserved_word[1:-1]
-                        temporary_reserved_word = ""
-                        # Manejo de caracteres de escape (\)
-                        if chr(92) in reserved_word:
-                            for y in reserved_word:
-                                temporary_reserved_word += y
-                                if temporary_reserved_word.count(chr(92)) == 2:
-                                    if temporary_reserved_word[:-1] == "\s":
-                                        temp_reserved_word = " "
-                                    else:
-                                        temp_reserved_word = (
-                                            temporary_reserved_word[:-1]
-                                        )
-                                    reserved_word = bytes(
-                                        temp_reserved_word, "utf-8"
-                                    ).decode("unicode_escape")
-                                    deletable_array.append(ord(reserved_word))
-                                    temporary_reserved_word = (
-                                        temporary_reserved_word[2:]
-                                    )
-                            if len(temporary_reserved_word) != 0:
-                                if temporary_reserved_word == "\s":
-                                    temp_reserved_word = " "
+                                # Se itera sobre el valor
+                                index_counter = 1
+                                first_value = ""
+                                first_apostrophe = None
+                                second_apostrophe = None
+                                while(value[index_counter] != ']'):
+                                    # Se buscan las apostrofes
+                                    if(value[index_counter] == "'" and not first_apostrophe):
+                                        first_apostrophe = index_counter
+                                    elif(value[index_counter] == "'" and first_apostrophe):
+                                        second_apostrophe = index_counter
+                                    # Se encuentra el valor dentro de las apostrofes y se guarda como tal
+                                    if(first_apostrophe and second_apostrophe):
+                                        first_value = str(value[(first_apostrophe + 1):second_apostrophe])
+                                        first_apostrophe = None
+                                        second_apostrophe = None
+                                        if(first_value == ''):
+                                            first_value = ' '
+                                            first_value = ord(first_value)
+                                        elif(first_value.startswith("\\")):
+                                            first_value = first_value.replace("\\", '')
+                                            if(first_value == "n"):
+                                                first_value = ord("\n")
+                                            elif(first_value == "t"):
+                                                first_value = ord("\t")
+                                        value_definition.append(first_value)
+                                        if(value[index_counter + 1] != ']'):
+                                            value_definition.append("|")
+                                    # Se itera en todos los valores
+                                    index_counter += 1
+                        # Si el charset se define entre comillas dobles, por lo tanto son valores uno despues de otro
+                        elif(value[1] == '"'):
+                            # Se itera entre cada valor despues de las comillas
+                            index_counter = 2
+                            while(value[index_counter] != '"'):
+                                # Se revisa si son valores como \n
+                                # Se hace una forma distinta con el contador
+                                if(value[index_counter] == "\\"):
+                                    value_definition.append(value[index_counter:(index_counter + 2)])
+                                    index_counter += 2
+                                # En otro caso se itera de manera normal y el valor se convierte en ascii
                                 else:
-                                    temp_reserved_word = temporary_reserved_word
-                                reserved_word = bytes(
-                                    temp_reserved_word, "utf-8"
-                                ).decode("unicode_escape")
-                                deletable_array.append(ord(reserved_word))
-                        else:
-                            reserved_word = list(reserved_word)
-                            for w in range(len(reserved_word)):
-                                reserved_word[w] = ord(reserved_word[w])
-                            deletable_array.extend(reserved_word)
-                else:
-                    deletable_array.append(reserved_word)
-                    reserved_word = ""
-        else:
-            tokens = []
-            token_actual = ""
-            # Procesamiento de la definición de la función
-            for char in definition:
-                if "]" in token_actual:
-                    word = ""
-                    array = []
-                    array.append("(")
-                    token_actual = token_actual[1:-1]
-                    for tok in token_actual:
-                        word += tok
-                        if word.count("'") == 2:
-                            word = ord(word[1:-1])
-                            array.append(word)
-                            array.append("|")
-                            word = ""
-                    array[len(array) - 1] = ")"
-                    tokens.extend(array)
-                    token_actual = ""
-                if token_actual.count("'") == 2:
-                    if "[" not in token_actual:
-                        token_actual = token_actual[1:-1]
-                        if token_actual == 'E':
-                            token_actual = ord(token_actual)  # Convertir 'E' a ASCII
-                        tokens.append(token_actual)
-                        token_actual = ""
-                if char in ("(", ")", "*", "?", "+", "|", "·"):
-                    if "'" not in token_actual:
-                        if token_actual:
-                            if len(token_actual) == 1:
-                                token_actual = ord(token_actual)
-                            tokens.append(token_actual)
-                            token_actual = ""
-                        tokens.append(char)
+                                    ascii_value = ord(value[index_counter])
+                                    value_definition.append(ascii_value)
+                                    index_counter += 1
+                                # Si el siguiente valor no es el fin del charset se agrega el or para los valores
+                                if(value[index_counter] != '"'):
+                                    value_definition.append('|')
+                                
+                        # Para la definicion nueva se agrega con el parentesis de cierre al final
+                        value_definition.append(')') 
+                        # Se guarda la definicion con el valor final de esta
+                        self.regular_expressions[definition] = value_definition 
+                    # Si no es un charset se revisa
                     else:
-                        token_actual += char
-                else:
-                    if char == '_':
-                        for i in range(32, 127):
-                            tokens.append(i)
-                            tokens.append("|")
-                    token_actual += char
-            if token_actual:
-                tokens.append(token_actual)
-            deletable_array.extend(tokens)
-        temp_expression.append(deletable_array)
-        clean_functions.append(temp_expression)
+                        # Se revisa si tiene charsets o caracteres entre el valor
+                        first_apostrophe = None
+                        value_list = []
+                        new_string = ""
+                        # Se itera entre cada caracter del valor y se guarda en una lista
+                        for i in range(len(value) - 1):
+                            # Si el caracter no es un operador y no esta entre comillas se guarda en el string que se realiza
+                            if(value[i] not in ".|*+?()" and value[i] != "'" and not first_apostrophe):
+                                new_string += value[i]
+                            # Si el caracter es una primera comilla el valor del string anterior se guarda en la lista
+                            # Se guarda donde inicia la comilla
+                            elif(value[i] == "'" and not first_apostrophe):
+                                first_apostrophe = i
+                                if(new_string != ""):
+                                    value_list.append(new_string)
+                                    new_string = ""
+                            # Si el valor es una comilla y existe la primera
+                            # Se guarda el valor que esta dentro de las comillas como un ascii
+                            elif(value[i] == "'" and first_apostrophe):
+                                apostrophes_value = value[(first_apostrophe + 1):i]
+                                value_ascii = ord(apostrophes_value)
+                                value_list.append(value_ascii)
+                                first_apostrophe = None
+                            # En cualquier otro caso se guarda el valor dentro del nuevo string
+                            else:
+                                if(new_string != ""):
+                                    value_list.append(new_string)
+                                    new_string = ""
+                                if(not first_apostrophe):
+                                    value_list.append(value[i])
 
-    # Procesamiento adicional de funciones
-    for x in range(len(clean_functions)):
-        isFunc = True
-        for c in ["+", "*", "(", ")", "?", "|"]:
-            if c in clean_functions[x][1]:
-                isFunc = False
-        if isFunc == False:
-            temp_expression = []
-            for y in clean_functions[x][1]:
-                temp_expression.append(y)
-                temp_expression.append("·")
-            for z in range(len(temp_expression)):
-                if temp_expression[z] == "(":
-                    if temp_expression[z + 1] == "·":
-                        temp_expression[z + 1] = ""
-                if temp_expression[z] == ")":
-                    if temp_expression[z - 1] == "·":
-                        temp_expression[z - 1] = ""
-                if temp_expression[z] == "*":
-                    if temp_expression[z - 1] == "·":
-                        temp_expression[z - 1] = ""
-                if temp_expression[z] == "|":
-                    if temp_expression[z - 1] == "·":
-                        temp_expression[z - 1] = ""
-                    if temp_expression[z + 1] == "·":
-                        temp_expression[z + 1] = ""
-                if temp_expression[z] == "+":
-                    if temp_expression[z - 1] == "·":
-                        temp_expression[z - 1] = ""
-                if temp_expression[z] == "?":
-                    if temp_expression[z - 1] == "·":
-                        temp_expression[z - 1] = ""
-            temp_expression = [element for element in temp_expression if element != ""]
-            clean_functions[x][1] = temp_expression[:-1]
-        else:
-            ascii_array = []
-            newString_Array = []
-            if "-" in clean_functions[x][1]:
-                for z in range(len(clean_functions[x][1])):
-                    if clean_functions[x][1][z] == "-":
-                        for i in range(
-                            clean_functions[x][1][z - 1],
-                            clean_functions[x][1][z + 1] + 1,
-                        ):
-                            ascii_array.append(i)
-                for i in ascii_array:
-                    newString_Array.append(i)
-                clean_functions[x][1] = newString_Array
-            newString_Array = []
-            for y in clean_functions[x][1]:
-                newString_Array.append(y)
-                newString_Array.append("|")
-            newString_Array = newString_Array[:-1]
-            clean_functions[x][1] = newString_Array
+                        # Se tienen el diccionario con las definiciones
+                        dictionary_keys = list(self.regular_expressions.keys())
+                        # Se itera entre las definiciones para ver si existen en el valor
+                        for i in dictionary_keys:
+                            # Si se encuentra un definicion en la lista, se cambia por el valor que se definio antes
+                            if(i in value_list):
+                                # Se revisa la cantidad de iteraciones de la definicion en el valor y se cambia la cantidad de veces
+                                # que este aparezca en el valor de definicion actual
+                                element_counter = value_list.count(i)
+                                while(element_counter != 0):
+                                    index = value_list.index(i)
+                                    # Se ingresan los valores en vez de la definicion que se tenia
+                                    value_list[index:(index + 1)] = self.regular_expressions[i]
+                                    element_counter -= 1
+                        # Se revisa si existen charsets
+                        bracket_counter = value_list.count("[")
+                        # Por cada charset se itera
+                        while(bracket_counter != 0):
+                            # Se toma los indices de cada charset
+                            initial_bracket = value_list.index("[")
+                            final_bracket = value_list.index("]")
+                            # Se insertan los simbolos de or entre cada valor del charset
+                            for i in range((initial_bracket + 1), (final_bracket - 1)):
+                                value_list[(i + 1):(i + 1)] = '|'
+                            # Y se disminuye dependiendo cuantas instancias existan
+                            bracket_counter -= 1
+                            # Se cambian los [] por ()
+                            value_list[initial_bracket] = '('
+                            final_bracket = value_list.index("]")
+                            value_list[final_bracket] = ')'
+                        # Para el valor final de la definicion se agregan en el primero y ultimo valor un parentesis
+                        value_list[0:0] = '('
+                        value_list[len(value_list):len(value_list)] = ')'
 
-    # Agregar paréntesis a las funciones
-    for func in clean_functions:
-        func[1] = ["("] + func[1] + [")"]
+                        # Se guarda la definicion con su valor en el diccionario
+                        self.regular_expressions[definition] = value_list
+                # Si se encuentra la linea de rule tokens se pone como verdadera la variables
+                elif('rule tokens' in line):
+                    tokens = True
+                # Si esta verdadera la variable de rule tokens
+                elif(tokens):
+                    actual_token = ""
+                    # Se toman las llaves del diccionario
+                    dictionary_keys = list(self.regular_expressions.keys())
+                    # Si la linea tiene un or se agrega a la expresion final
+                    if('|' in line):
+                        final_regex.append('|')
 
-    # Convertir caracteres individuales a códigos ASCII
-    functionNames = [x[0] for x in clean_functions] + ["|"]
-    clean_regex_expression = [
-        ord(x) if len(x) == 1 and x not in functionNames else x
-        for x in clean_regex_expression
-    ]
-
-    temporalNewRegex = []
-    # Agregar concatenación y etiquetas a las expresiones regulares
-    for x in clean_regex_expression:
-        if x != "|":
-            temporalNewRegex.append("(")
-            temporalNewRegex.append(x)
-            temporalNewRegex.append("·")
-            temporalNewRegex.append("#" + str(x))
-            temporalNewRegex.append(")")
-        else:
-            temporalNewRegex.append(x)
-
-    clean_regex_expression = temporalNewRegex
-
-    # Reemplazar referencias a funciones en expresiones regulares
-    def replace_regex(regex, functions):
-        final_regex = []
-        for r in regex:
-            if r in functions:
-                final_regex.extend(replace_regex(functions[r], functions))
-            else:
-                final_regex.append(r)
-        return final_regex
-
-    final_regex = replace_regex(clean_regex_expression, dict(clean_functions))
-
-    # Convertir códigos ASCII de vuelta a caracteres originales
-    final_regex_characters = convert_to_original(final_regex)
-
-    return final_regex_characters
+                    # Si tiene comillas simples el caracter se revisa
+                    if("'" in line):
+                        # Se itera en la linea y se buscan los dos apostrofes
+                        first_apostrophe = None
+                        for i in range(len(line)):
+                            # Se toma el primero
+                            if(line[i] == "'" and first_apostrophe == None):
+                                first_apostrophe = i
+                            # Se toma el segundo
+                            # Se toma el valor entre los apostrofes y se guarda como ascii
+                            elif(line[i] == "'" and first_apostrophe != None):
+                                apostrophes_value = line[(first_apostrophe + 1):i]
+                                value_ascii = ord(apostrophes_value)
+                                final_regex.append(value_ascii)
+                                final_regex.append(f"#{apostrophes_value}")
+                                actual_token = f"#{apostrophes_value}"
+                                first_apostrophe = None
+                    # Si tiene comillas dobles el caracter se revisa
+                    elif('"' in line):
+                        # Se itera en busqueda de las comillas
+                        first_apostrophe = None
+                        for i in range(len(line)):
+                            # Se busca la primera
+                            if(line[i] == '"' and first_apostrophe == None):
+                                first_apostrophe = i
+                            # Se busca la segunda
+                            # Se guarda el valor como tal y se guarda en la expresion
+                            elif(line[i] == '"' and first_apostrophe != None):
+                                apostrophes_value = line[(first_apostrophe + 1):i]
+                                for i in apostrophes_value:
+                                    final_regex.append(ord(i))
+                                final_regex.append(f"#{apostrophes_value}")
+                                actual_token = f"#{apostrophes_value}"
+                                first_apostrophe = None
+                    # Si no tiene nada de lo anterior
+                    else:
+                        # Se itera en el diccionario
+                        for i in dictionary_keys:
+                            # Si existe una definicion en la linea se agrega a la expresion final
+                            if i in line:
+                                final_regex[len(final_regex):len(final_regex)] = self.regular_expressions[i]
+                                final_regex.append(f"#{i}")
+                                actual_token = f"#{i}"
+                    if(actual_token != ""):
+                        first_bracket = line.index("{")
+                        second_bracket = line.index("}")
+                        code_return = line[first_bracket + 2:second_bracket - 1]
+                        self.tokens_list[actual_token] = code_return
+        # Se guarda la expresion regular final en el atributo de la clase
+        self.regex = final_regex
