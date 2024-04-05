@@ -2,130 +2,172 @@
 Algoritmo de Conversión Directa
 '''
 
-import pydotplus
+from afd import *
+from arbol import *
 
-def create_dfa_graph(states, acceptance_states, transitions, start_state):
-    # Convierte conjuntos a cadenas de texto
-    states = [str(state) for state in states]
-    start_state = str(start_state)
-    acceptance_states = [str(state) for state in acceptance_states]
+# Se toma el algortimo para nullable
+def nullable(node):
+    # Se retornan nulos los simbolos que lo son
+    if(node.isOperator and node.character in "ε?*"):
+        return True
+    # Para el or se retorna los nulos de los dos hijos con or
+    elif(node.isOperator and node.character == "|"):
+        return (nullable(node.left_child) or nullable(node.right_child))
+    # Para concatenacion se retorna el nulo de los dos hijos con and
+    elif(node.isOperator and node.character == "."):
+        return (nullable(node.left_child) and nullable(node.right_child))
+    # Para la cerradura positiva se regresa el nulo del hijo
+    elif(node.isOperator and node.character == "+"):
+        return nullable(node.left_child)
+    # Si es un caracter no es nulo
+    else:
+        return False
 
-    # Crear una representación del DFA en formato DOT
-    dot = pydotplus.Dot()
-    dot.set_rankdir("LR")  # Utilizar 'TB' para un diseño de arriba hacia abajo
-    dot.set_prog("neato")
+# Se toma el algoritmo para realizar el firstpos
+def firstpos(node):
 
-    # Create nodes for each state
-    state_nodes = {}
-    num = 0
-    for state in states:
-        node = pydotplus.Node(state)
-        if state == start_state:
-            node.set_shape("circle")
-            node.set_style("filled")
+    # Si es epsilon se regresa un vacio
+    if(node.isOperator and node.character == "ε"):
+        return set()
+    # Si es un or se regresa la union de los dos hijos
+    elif(node.isOperator and node.character == "|"):
+        return (firstpos(node.right_child).union(firstpos(node.left_child)))
+    # Si es concatenacion se regresa la union si el izquierdo es nulo, del contrario es el izquierdo
+    elif(node.isOperator and node.character == "."):
+        if(nullable(node.left_child)):
+            return (firstpos(node.right_child).union(firstpos(node.left_child)))
+        else:
+            return firstpos(node.left_child)
+    # Para las cerraduras se regresa el firstpos de su hijo
+    elif(node.isOperator and node.character in "*+?"):
+        return firstpos(node.left_child)
+    # Si es un caracter se regresa solo la posicion
+    else:
+        return {node}
 
-        if state in acceptance_states:
-            node.set_shape("doublecircle")  # Final states are double circled
-        node.set_fontsize(12)  # Set font size
-        node.set_width(0.6)  # Set the desired width
-        node.set_height(0.6)  # Set the desired height
-        state_nodes[state] = node
-        dot.add_node(node)
+# Se toma el algoritmo para realizar el lastpos
+def lastpos(node):
 
-        num += 1
+    # Para epsilon se regresa un vacio
+    if(node.isOperator and node.character == "ε"):
+        return set()
+    # Si es un or se regresa la union de los dos hijos
+    elif(node.isOperator and node.character == "|"):
+        return (lastpos(node.right_child).union(lastpos(node.left_child)))
+    # Si es concatenacion se regresa la union si el derecho es nulo, del contrario es el derecho
+    elif(node.isOperator and node.character == "."):
+        if(nullable(node.right_child)):
+            return (lastpos(node.right_child).union(lastpos(node.left_child)))
+        else:
+            return lastpos(node.right_child)
+    # Para las cerraduras se regresa el firstpos de su hijo
+    elif(node.isOperator and node.character in "*+?"):
+        return lastpos(node.left_child)
+    # Si es un caracter se regresa solo la posicion
+    else:
+        return {node}
 
-    # Agrega transiciones como arcos
-    for (source, symbol, target) in transitions:
-        if str(source) in state_nodes and str(target) in state_nodes:
-            edge = pydotplus.Edge(state_nodes[str(source)], state_nodes[str(target)], label=symbol)
-            dot.add_edge(edge)
+# Se utiliza el algoritmo para el followpos
+def followpos(node):
+    # Para cada caracter de concatenacion se realiza el algoritmo
+    if(node.isOperator and node.character == "."):
+        # Se toma el lastpos y se itera
+        pos_i = lastpos(node.left_child)
+        # Para cada posicion que regresa lastpos
+        for i in pos_i:
+            # Se agrega la union del followpos con el firstpos del nodo derecho
+            i.followpos = i.followpos.union(firstpos(node.right_child))
+    # Para los caracteres de cerradura se realiza lo siguiente
+    elif(node.isOperator and node.character in "*+"):
+        # Se toma lastpos y se itera
+        pos_i = lastpos(node.left_child)
+        # Para cada posicion que regresa lastpos
+        for i in pos_i:
+            # Se agrega la union del followpos con el firstpos del nodo derecho
+            i.followpos = i.followpos.union(firstpos(node.left_child))
 
-    return dot
+def computeProperties(nodes):
+    for node in nodes:
+        node.nullable = nullable(node)
+        node.firstpos = firstpos(node)
+        node.lastpos = lastpos(node)
+        followpos(node)
 
+def getSymbols(regex):
 
-def set_estados(primer, elements, node_list, Dtran, Destados):
+    symbols = []
 
-    element1_key = 0
-    element1 = []
+    for i in regex:
+        if(isinstance(i, int) and i not in symbols):
+            symbols.append(i)
+        elif(i not in symbols and i not in ".|*+?()"):
+            symbols.append(i)
 
-    for ele in elements:
-        element1_key = ele
-        element1 = node_list[ele]
-        break
-
-    list_elements = []
-    list_elements.append(element1_key)
-    for element in elements:
-        element_value = node_list[element]
-        if element1_key != element and element1[0] == element_value[0]:
-            list_elements.append(element)
-
-    new_state = set()
-    for element in list_elements:
-        new_state = new_state.union(node_list[element][1])
-        elements.remove(element)
-
-    if new_state != set():
-        flag = False
-        for estado in Destados:
-            if new_state == estado[0]:
-                flag = True
-                break
-
-        if flag == False:
-            Destados.append([new_state, False])
-
-    if element1[0] != '#' and element1[0] != '𝜀':
-        Dtran.append((primer, element1[0], new_state))
-
-    return elements, node_list, Dtran, Destados
+    return symbols
 
 
-def exec(stack_arbol, node_list, alfabeto, graph=False):
+# Se utiliza el algoritmo para la construccion directa
+def afdConstruction(regex, title):
+    # Se crea el arbol
+    tree = SyntaxTree(regex, title)
+    # Se obtiene la raiz y la lista de nodos
+    tree_root = tree.tree_root
+    node_list = tree.node_list
+    # Se crean los estados y transiciones del AFD
+    states = ["S0"]
+    transitions = []
+    final_states = {}
+    symbols = getSymbols(regex)
 
-    Destados = []
-    Dtran = []
+    # Se ejecutan las propiedades de los nodos
+    computeProperties(node_list)
+    
+    # Se crea dstates
+    Dstates = [firstpos(tree_root)]
+    state_counter = 0
+    # Mientras no haya ninguno marcado se continua
+    while(state_counter != len(Dstates)):
+        # Se itera por cada simbolo
+        for symbol in symbols:
+            # Se crea el nuevo set
+            new_state = set()
+            # Por cada nodo de dstates
+            for node in Dstates[state_counter]:
+                # Une cada followpos
+                if(node.character == symbol):
+                    new_state = new_state.union(node.followpos)
+            # Si el nuevo estado es vacio no se toma en cuenta
+            if(len(new_state) != 0):
+                # Si el estado no esta en Dstates se ingresa
+                if(new_state not in Dstates):
+                    Dstates.append(new_state)
+                    states.append("S" + str(len(states)))
+                # Se busca el estado de transicion
+                new_state_counter = Dstates.index(new_state)
+                # Se realiza la transicion
+                transitions.append([states[state_counter], symbol, states[new_state_counter]])
 
-    Destados.append([stack_arbol[len(stack_arbol) - 1].primerapos, False])
+        # Se hacen dos sets para lograr hacer operaciones de conjuntos entre ellos
+        set_states = set(Dstates[state_counter])
+        set_final_states = set(lastpos(tree_root))
 
-    flag = False
-    while flag == False:
-        for estado in Destados:
-            if estado[1] == False:
-                estado_actual = estado[0]
-                estado[1] = True
-                Destados[Destados.index(estado)] = estado
-                flag = False
-                break
-            else:
-                flag = True
-        if flag == True:
-            break
+        # Se verifica que los estados encontrados se encuentren en el conjunto de estados finales
+        if(set_states.intersection(set_final_states).__len__() != 0):
+            node_final = set_states.intersection(set_final_states)
+            node_char = node_final.pop().character
+            final_states[states[state_counter]] = node_char
 
-        temp_estado = estado_actual.copy()
+        # Se agrega un contador para marcar los estados
+        state_counter += 1
+        
+    # Se crea el AFD
+    afd = AFD("AFD Directo", title)
+    afd.regex = regex
+    afd.states = states
+    afd.symbols = symbols
+    afd.transitions = transitions
+    afd.initial_state = states[0]
+    afd.final_states = final_states
+    afd.graphAF()
 
-        while temp_estado != set():
-            temp_estado, node_list, Dtran, Destados = set_estados(estado_actual, temp_estado, node_list, Dtran, Destados)
-
-    estados = []
-    estado_final = []
-
-    lastKey, lastValue = list(node_list.items())[-1]
-
-    for estado in Destados:
-        estados.append(estado[0])
-        if lastKey in estado[0]:
-            estado_final.append(estado[0])
-
-    estado_inicial = Destados[0][0]
-
-    if graph:
-        pydotplus.find_graphviz()
-
-        graph = create_dfa_graph(estados, estado_final, Dtran, estado_inicial)
-
-        # Save or display the graph
-        png_file_path = "dfa_direct_graph.png"
-        graph.write_png(png_file_path)  # Save PNG file
-
-    return estados, alfabeto, Dtran, estado_inicial, estado_final
+    return afd
