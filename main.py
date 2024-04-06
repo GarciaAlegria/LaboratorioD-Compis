@@ -1,11 +1,11 @@
 from readyalex import *
 from arbol import *
 from dfa_directly import *
-
+from scanner_producer import *
 
 # Se toma el filename
 print("=======================================================")
-filename = "./tests/slr-3.yal"
+filename = "slr-3.yal"
 # Se obtiene el filereader
 file_reader = File(filename)
 # reguex y tokens
@@ -21,3 +21,5 @@ print("Tokens")
 print(tokens)
 # Se crea el AFD
 afd = afdConstruction(regex, "Yalex 3")
+afd.simulation("token_test.txt")
+ScannerProducer(afd, "Yalex_3", tokens)
